@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: im-wallet-services-route
+  namespace: aka-staging
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`stag-v2.akachat.me`) && PathPrefix(`/im-wallet`)
+      kind: Rule
+      services:
+        - name: im-wallet-api-service
+          port: 10011
+      middlewares:
+        - name: strip-im-wallet-prefix

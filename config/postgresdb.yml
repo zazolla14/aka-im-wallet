@@ -1,0 +1,32 @@
+# URI for database connection, leave empty if using address and credential settings directly
+uri: ""
+
+# Hostname or IP address of PostgreSQL server
+host: localhost
+
+# Port of PostgreSQL server
+port: 5432
+
+# Name of the database
+database: openim_v3
+
+# Username for database authentication
+username: root
+
+# Password for database authentication
+password: openIM123
+
+# SSL mode (disable, require, verify-ca, verify-full)
+sslmode: disable
+
+# Maximum number of open connections in the pool
+maxOpenConns: 100
+
+# Maximum number of idle connections in the pool
+maxIdleConns: 10
+
+# Maximum number of retry attempts for a failed database connection
+maxRetry: 10
+
+# Connection timeout in seconds
+connectTimeout: 5

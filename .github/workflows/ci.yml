@@ -1,0 +1,379 @@
+name: 🔨 Build & Deploy
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build-and-push:
+    name: 🔨 Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+    outputs:
+      changed-services: ${{ steps.upload-artifacts.outputs.changed-services }}
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25.1"
+          cache: true # Enable built-in Go cache
+
+      - name: 🔐 Configure Git for private repos
+        env:
+          PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          # 检查是否设置了 PRIVATE_TOKEN
+          if [ -z "$PRIVATE_TOKEN" ]; then
+            echo "❌ Error: PRIVATE_REPO_TOKEN secret is not set!"
+            exit 1
+          fi
+
+          # 配置 Git 认证
+          echo "🔧 Configuring Git authentication..."
+
+          # 清除可能的旧配置
+          git config --global --unset-all url.https://github.com/.insteadof || true
+          git config --global --unset-all credential.helper || true
+
+          # 设置 Git 凭证存储
+          git config --global credential.helper store
+          echo "https://x-access-token:${PRIVATE_TOKEN}@github.com" > ~/.git-credentials
+          chmod 600 ~/.git-credentials
+
+          # 特定组织的 URL 重写
+          git config --global url."https://x-access-token:${PRIVATE_TOKEN}@github.com/1nterdigital/".insteadOf "https://github.com/1nterdigital/"
+
+          # 设置 .netrc 文件作为备用
+          echo "machine github.com login x-access-token password ${PRIVATE_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+
+          # 配置 Go 环境变量
+          echo "🔧 Configuring Go environment..."
+          echo "GOPRIVATE=github.com/1nterdigital/*" >> $GITHUB_ENV
+          echo "GOPROXY=direct" >> $GITHUB_ENV
+          echo "GOSUMDB=off" >> $GITHUB_ENV
+          echo "GIT_TERMINAL_PROMPT=0" >> $GITHUB_ENV
+
+          echo "✅ Private repository configuration completed"
+
+      - name: 🔧 Set up environment
+        run: |
+          export VERSION=$(echo ${GITHUB_SHA} | cut -c1-7)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "MD5_CACHE_DIR=/tmp/md5-cache" >> $GITHUB_ENV
+          mkdir -p /tmp/md5-cache
+
+      - name: 🔐 Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📦 Download Go dependencies
+        run: |
+          echo "🔧 Setting up Go environment..."
+
+          # 配置 Go 环境变量
+          export GOPROXY="https://proxy.golang.org,direct"
+          export GOPRIVATE="github.com/1nterdigital/*"
+          export GOSUMDB="sum.golang.org"
+          export GONOSUMDB="github.com/1nterdigital/*"
+
+          echo "🔧 Running go mod tidy..."
+          go mod tidy
+
+          echo "🔧 Running go mod download..."
+          go mod download
+
+          echo "✅ Dependencies downloaded successfully"
+
+      - name: 📥 Download and setup MD5 cache
+        id: cache-md5
+        uses: actions/cache@v4
+        with:
+          path: /tmp/md5-cache
+          key: md5-cache-${{ github.repository }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            md5-cache-${{ github.repository }}-${{ github.ref_name }}-
+
+      - name: 🏗️ Build and Push services
+        id: build-services
+        run: |
+          # Check if service MD5 has changed
+          check_md5_changed() {
+              local service_name=$1
+              local current_md5=$2                
+              echo "🔍 Checking MD5 cache for $service_name with MD5: $current_md5"
+              
+              local cache_file="${MD5_CACHE_DIR}/${service_name}@${current_md5}"
+              
+              if [ -f "$cache_file" ]; then
+                  echo "✅ MD5 unchanged for $service_name: $current_md5"
+                  return 0  # MD5 same, skip build
+              else
+                  echo "🔄 MD5 changed for $service_name, current MD5: $current_md5"
+                  return 1  # MD5 different or first build, need to build
+              fi
+          }
+
+          # Save service MD5 to cache
+          save_md5_to_cache() {
+              local service_name=$1
+              local md5_hash=$2
+              
+              echo "💾 Saving MD5 to cache: $service_name → $md5_hash"
+              
+              # Delete all old cache files for this service
+              echo "🗑️ Removing all old cache files for $service_name"
+              rm -f "${MD5_CACHE_DIR}/${service_name}"
+              rm -f "${MD5_CACHE_DIR}/${service_name}@"*
+              
+              # Create new cache file
+              local new_cache_file="${MD5_CACHE_DIR}/${service_name}@${md5_hash}"
+              touch "$new_cache_file"
+              echo "📁 Created cache file: $new_cache_file"
+          }
+
+          # Create changed services file
+          CHANGED_SERVICES_FILE="changed_services.txt"
+          > "$CHANGED_SERVICES_FILE"
+
+          # Display current cache content
+          echo "📋 Current MD5 cache contents:"
+          cache_count=0
+          for cache_file in "${MD5_CACHE_DIR}"/*; do
+              if [ -f "$cache_file" ]; then
+                  filename=$(basename "$cache_file")
+                  if [[ "$filename" == *"@"* ]]; then
+                      service_name="${filename%@*}"
+                      cached_md5="${filename#*@}"
+                      echo "  📄 $service_name: $cached_md5"
+                  else
+                      echo "  📄 $filename: (old format)"
+                  fi
+                  cache_count=$((cache_count + 1))
+              fi
+          done
+          if [ $cache_count -eq 0 ]; then
+              echo "  📋 No cached MD5 files found, starting fresh"
+          else
+              echo "📊 Total cached services: $cache_count"
+          fi
+
+          # Build each service
+          for file in $(find ./cmd -type f -name "main.go" -not -path "*/aka-im-cmdutils/*"); do
+            echo "🔨 Processing: $file"
+            service_name=$(basename $(dirname "$file"))
+            echo "Building $service_name..."
+            
+            # Check if binary already exists in cache
+            if [ -f "./bundle/$service_name" ]; then
+                echo "📦 Found cached binary for $service_name"
+            else
+                echo "🏗️ Building $service_name from source..."
+                go build -gcflags="all=-N -l" -ldflags="-buildid=" -trimpath -o ./bundle/"$service_name" "$file"
+            fi
+            
+            if [ ! -f "./bundle/$service_name" ]; then
+              echo "❌ Build failed for $service_name"
+              continue
+            fi
+            
+            echo "📁 Built binary: ./bundle/$service_name"
+            md5_hash=$(md5sum ./bundle/"$service_name" | cut -d' ' -f1)
+            echo "📦 Service: $service_name, Version: $VERSION, MD5: $md5_hash"
+            
+            # Check if MD5 has changed
+            if check_md5_changed "$service_name" "$md5_hash"; then
+              echo "⏭️ Skipping $service_name - MD5 unchanged, no need to build image or push"
+              echo "⏭️ ---------------------------------------------------------------------------------------"
+              continue
+            fi
+
+            # Build and push Docker image
+            md5_short="${md5_hash:0:8}"
+            tag="$(echo "${{ github.ref_name }}" | tr '/:' '-')-${md5_short}-${VERSION}"
+            full_image_name="ghcr.io/${{ github.repository_owner }}/$service_name:$tag"
+
+            echo "🏷️  Tag: $tag"
+            echo "🐳 Full image name: $full_image_name"
+
+            echo "🐳 Building Docker image..."
+            docker build \
+              -f Dockerfile \
+              -t "$full_image_name" \
+              --build-arg SERVICE_NAME=$service_name \
+              --build-arg BINARY_PATH=bundle \
+              .
+            
+            if [ $? -eq 0 ]; then
+              echo "📤 Pushing to Docker Registry: $full_image_name"
+              docker push "$full_image_name"
+              if [ $? -eq 0 ]; then
+                echo "✅ Successfully pushed: $tag"
+                save_md5_to_cache "$service_name" "$md5_hash"
+                echo "$service_name:$tag" >> "$CHANGED_SERVICES_FILE"
+                echo "📝 Added to GitOps update list: $service_name:$tag"
+              else
+                echo "❌ Failed to push: $tag"
+              fi
+            else
+              echo "❌ Docker build failed for: $service_name"
+            fi
+            echo "⏭️ ----------------------------------------------"
+          done
+
+          echo "🎉 All services processed!"
+
+      - name: 📤 Upload changed services artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changed-services
+          path: changed_services.txt
+          retention-days: 1
+
+  update-gitops:
+    name: 📝 Update GitOps Repository
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+    if: always() && needs.build-and-push.result == 'success'
+    steps:
+      - name: 📥 Download changed services artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: changed-services
+
+      - name: 🔄 Update GitOps Repository
+        env:
+          GIT_USER_OPS_NAME: ${{ vars.GIT_USER_OPS_NAME }}
+          GIT_USER_OPS_EMAIL: ${{ vars.GIT_USER_OPS_EMAIL }}
+          DOCKER_REGISTRY: ${{ vars.DOCKER_REGISTRY }}
+          PRIVATE_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          echo "🔍 Checking for services that need GitOps update..."
+          CHANGED_SERVICES_FILE="changed_services.txt"
+
+          if ! grep -q . "$CHANGED_SERVICES_FILE"; then
+              echo "✅ No services need GitOps update, skipping..."
+              exit 0
+          fi
+
+          echo "📋 Services to update in GitOps:"
+          while read -r service_info; do
+              if [ -n "$service_info" ]; then
+                  echo "  🔄 $service_info"
+              fi
+          done < "$CHANGED_SERVICES_FILE"
+
+          # Configure git
+          git config --global user.name "${GIT_USER_OPS_NAME}"
+          git config --global user.email "${GIT_USER_OPS_EMAIL}"
+
+          # Clone GitOps repository
+          echo "📥 Cloning GitOps repository..."
+          git clone https://x-access-token:$PRIVATE_TOKEN@github.com/1nterdigital/k8s-env-test.git -b main
+          cd k8s-env-test
+
+          # Update image tags
+          echo "🔄 Updating image tags in manifests..."
+          BRANCH_NAME="main"
+          updated_count=0
+          files_modified=false
+            
+          # Process each changed service
+          while read -r line; do
+              if [ -n "$line" ]; then
+                  service=$(echo "$line" | cut -d: -f1)
+                  tag=$(echo "$line" | cut -d: -f2)
+                        
+                  echo "📝 Updating $service to tag: $tag"
+                        
+                  # Build path to corresponding kustomization.yml file for the service
+                  kustomization_file="./apps/$service/overlays/dev/kustomization.yml"
+                        
+                  if [ -f "$kustomization_file" ]; then
+                      echo "  📄 Found kustomization file: $kustomization_file"
+                            
+                      # Check if file contains image configuration for this service
+                      if grep -q "newName: $DOCKER_REGISTRY/$service" "$kustomization_file"; then
+                          # Get current tag
+                          old_tag=$(grep "newTag:" "$kustomization_file" | sed 's/.*newTag: *//' | tr -d ' ')
+                                
+                          # Print tag change info
+                          echo "  🏷️  Tag comparison for $service:"
+                          echo "    📜 Old tag: $old_tag"
+                          echo "    🆕 New tag: $tag"
+                                
+                          if [ "$old_tag" = "$tag" ]; then
+                              echo "    ✅ Tags are identical, no update needed"
+                          else
+                              echo "    🔄 Tags are different, updating..."
+                              echo "  🔄 Updating image tag in: $kustomization_file"
+                              # Use sed to update newTag field
+                              sed -i.bak "s|newTag: [^[:space:]]*|newTag: $tag|g" "$kustomization_file"
+                              rm -f "$kustomization_file.bak" 2>/dev/null || true
+                              echo "  ✅ Updated $service image tag: $old_tag → $tag"
+                              files_modified=true
+                              updated_count=$((updated_count + 1))
+                          fi
+                      else
+                          echo "  ❌ ERROR: Service $service not found in kustomization file: $kustomization_file"
+                          echo "  💡 Expected to find image reference: newName: $DOCKER_REGISTRY/$service"
+                          echo "  📄 Please check the kustomization.yml file content and ensure the service name matches"
+                          exit 1
+                      fi
+                  else
+                      echo "  ❌ ERROR: Kustomization file not found: $kustomization_file"
+                      echo "  💡 Expected path structure: apps/$service/overlays/dev/kustomization.yml"
+                      echo "  📁 Please ensure the GitOps repository has the correct directory structure"
+                      exit 1
+                  fi
+              fi
+          done < "../$CHANGED_SERVICES_FILE"
+            
+          # Check if files were actually modified
+          if [ "$files_modified" = false ]; then
+              echo "✅ No files need to be modified (all tags are identical), skipping commit and push..."
+              exit 0
+          fi
+            
+          # Verify git status to ensure files were actually modified
+          if git diff --quiet; then
+              echo "⚠️ Unexpected: files_modified=true but git diff shows no changes, skipping commit..."
+              exit 0
+          fi
+            
+          # Display modified files
+          echo "📋 Modified files:"
+          git diff --name-only | while read -r file; do
+              echo "  📄 $file"
+          done
+            
+          # Commit changes
+          echo "💾 Committing changes..."
+          git add .
+          git commit -m "🚀 Update image tags from workflow
+
+          Updated services ($updated_count):
+          $(cat "../$CHANGED_SERVICES_FILE" | sed 's/^/- /')
+
+          Build commit: ${{ github.sha }}
+          Build branch: ${{ github.ref_name }}"
+            
+          # Push to remote repository
+          echo "📤 Pushing changes to repository..."
+          git push origin "$BRANCH_NAME"
+            
+          echo "✅ GitOps update completed successfully!"
+          echo "📋 Updated $updated_count services in k8s-env-test"
+          echo "🔗 Branch: $BRANCH_NAME"
+          echo "🔗 Repository: https://github.com/1nterdigital/k8s-env-test/tree/$BRANCH_NAME"
+
+          echo "✅ GitOps update completed!!"

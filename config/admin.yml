@@ -1,0 +1,4 @@
+tokenPolicy:
+  expire: 90
+
+secret: chat123

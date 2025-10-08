@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wallet-publisher-refund-trx
+spec:
+  schedule: "0 * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: publisher
+              image: ${IMAGE}
+              imagePullPolicy: IfNotPresent
+              command: ["/im-wallet-cronjob/_output/publisher"]
+              args: ["-c", "/config", "--key", "refundTransferEnvelope"]
+              env:
+                - name: CONFIG_PATH
+                  value: /config
+                - name: WALLETENV_MYSQLDB_URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: openim-mysql-secret
+                      key: mysql_openim_uri
+                - name: WALLETENV_MYSQLDB_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: openim-mysql-secret
+                      key: mysql_openim_username
+                - name: WALLETENV_MYSQLDB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: openim-mysql-secret
+                      key: mysql_openim_password
+                - name: WALLETENV_KAFKA_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: openim-kafka-secret
+                      key: kafka-username
+                - name: WALLETENV_KAFKA_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: openim-kafka-secret
+                      key: kafka-password
+              volumeMounts:
+                - name: im-wallet-config
+                  mountPath: /config
+                  readOnly: true
+                - name: general-cert
+                  mountPath: /certs/amazon-ca.pem
+                  subPath: amazon-ca.pem
+                  readOnly: true
+          restartPolicy: OnFailure
+          volumes:
+            - name: im-wallet-config
+              configMap:
+                name: im-wallet-config
+            - name: general-cert
+              secret:
+                secretName: general-cert

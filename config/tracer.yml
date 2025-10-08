@@ -1,0 +1,6 @@
+appName:
+  api: "im-server-wallet-api"
+otel:
+  collector:
+    address: "localhost:4317"
+  enable: false

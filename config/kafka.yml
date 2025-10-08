@@ -1,0 +1,16 @@
+username: ''
+password: ''
+producerAck: 
+compressType: none
+address: [ localhost:19094 ]
+toExpiredTransferTopic: toExpiredTransfer
+toExpiredEnvelopeTopic: toExpiredEnvelope
+toExpiredTransferGroupID: toExpiredTransferGroupID
+toExpiredEnvelopeGroupID: toExpiredEnvelopeGroupID
+tls:
+  enableTLS: false
+  caCrt: 
+  clientCrt: 
+  clientKey: 
+  clientKeyPwd: 
+  insecureSkipVerify: false

@@ -1,0 +1,37 @@
+networks:
+  akaim:
+    driver: bridge
+
+services:
+  #  postgres:
+  #    image: postgres:15
+  #    container_name: postgres
+  #    restart: always
+  #    ports:
+  #      - "5432:5432"
+  #    environment:
+  #      POSTGRES_USER: root
+  #      POSTGRES_PASSWORD: openIM123
+  #      POSTGRES_DB: openim_v3
+  #      TZ: Asia/Shanghai
+  #    volumes:
+  #      - ./data/postgres:/var/lib/postgresql/data
+  #    networks:
+  #      - openim
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootAkawallet123
+      MYSQL_DATABASE: aka_wallets
+      MYSQL_USER: akawallet
+      MYSQL_PASSWORD: akawallet
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    networks:
+      - akaim

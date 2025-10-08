@@ -1,0 +1,81 @@
+package eerrs
+
+const (
+	ErrorCodePasswordError = 20001 + iota
+	ErrorCodeAccountNotFound
+	ErrorCodePhoneAlreadyRegister
+	ErrorCodeAccountAlreadyRegister
+	ErrorCodeVerifyCodeSendFrequently
+	ErrorCodeVerifyCodeNotMatch
+	ErrorCodeVerifyCodeExpired
+	ErrorCodeVerifyCodeMaxCount
+	ErrorCodeVerifyCodeUsed
+	ErrorCodeInvitationCodeUsed
+	ErrorCodeInvitationNotFound
+	ErrorCodeForbidden
+	ErrorCodeRefuseFriend
+	ErrorCodeEmailAlreadyRegister
+)
+
+const (
+	ErrorTokenNotExist = 20101 + iota
+)
+
+const (
+	ErrorCodeEntryTypeInvalid = 30001 + iota
+	ErrorCodeTransactionTypeInvalid
+	ErrorCodeWalletIDRequired
+	ErrorCodeDescriptionEnRequired
+	ErrorCodeDescriptionZhRequired
+	ErrorCodeReferenceCodeRequired
+	ErrorCodeImpactedItemRequired
+	ErrorCodeInsufficientBalance
+	ErrorCodeWalletNotFound
+	ErrorCodeInvalidFormatStartDate
+	ErrorCodeInvalidFormatEndDate
+	ErrorCodeUserIDNotFoundCtx
+	ErrorCodeWalletExisted
+	ErrorCodeInvalidStatusRequest
+	ErrorCodeCurrencyMismatch
+	ErrCodeExceedGreetingLength
+	ErrCodeRedEnvelopeAmountRange
+)
+
+const (
+	// Envelope
+	ErrorCodeEnvelopeNotFound = 31001 + iota
+	ErrorCodeUnsupportedEnvelopeType
+	ErrorCodeExpiredEnvelope
+	ErrorCodeEnvelopeNotActive
+	ErrorCodeUnauthorizedUserID
+	ErrorCodeUnauthorizedClaimer
+	ErrorCodeAmountExceedsWalletBalance
+	ErrorCodeNoMoreSharesToClaim
+	ErrorCodeTotalClaimerMustGreaterThanZero
+	ErrorCodeSendingDailyLimit
+	ErrorCodeClaimingDailyLimit
+	ErrorCodeAllEnvelopeHasBeenClaimed
+	ErrorCodeUserAlreadyClaimedThisEnvelope
+	ErrorCodeNoRemainingAmountToRefund
+	ErrorCodeEnvelopeIDNotFoundParam
+)
+
+const (
+	// Transfer
+	ErrorCodeNoEligibleTransferRefund = 32001 + iota
+	ErrorCodeTransferIDRequired
+	ErrorCodeInvalidTransferID
+	ErrorCodeTransferNotFound
+	ErrorCodeTransferFailed
+	ErrorCodeReceiverWalletNotFound
+	ErrorCodeCannotTransferToSelf
+	ErrorCodeTransferLimitExceeded
+	ErrorCodeInvalidTransferAmount
+	ErrorCodeReceiverWalletLocked
+	ErrorCodeTransferAlreadyClaimed
+	ErrorCodeTransferExpired
+	ErrorCodeTransferInactive
+	ErrorCodeNoEligibleTransfer
+	ErrorCodeSendingTransferDailyLimit
+	ErrorCodeClaimTransferDailyLimit
+)

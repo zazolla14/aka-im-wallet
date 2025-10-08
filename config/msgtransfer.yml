@@ -1,0 +1,4 @@
+prometheus:
+  enable: true
+  autoSetPorts: true
+  ports: [ 19020 ]

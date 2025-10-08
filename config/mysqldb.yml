@@ -1,0 +1,32 @@
+# URI for database connection, leave empty if using address and credential settings directly
+uri: ""
+
+# Hostname or IP address of PostgreSQL server
+host: localhost
+
+# Port of PostgreSQL server
+port: 3306
+
+# Name of the database
+database: aka_wallets
+
+# Username for database authentication
+username: akawallet
+
+# Password for database authentication
+password: akawallet
+
+# SSL mode (disable, require, verify-ca, verify-full)
+sslmode: disable
+
+# Maximum number of open connections in the pool
+maxOpenConns: 100
+
+# Maximum number of idle connections in the pool
+maxIdleConns: 10
+
+# Maximum number of retry attempts for a failed database connection
+maxRetry: 10
+
+# Connection timeout in seconds
+connectTimeout: 5
